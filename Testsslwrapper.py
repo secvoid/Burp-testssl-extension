@@ -9,6 +9,8 @@ try:
 	from burp import IContextMenuInvocation
 	from burp import IHttpRequestResponse
 	from burp import IScannerCheck
+	from burp import IScanIssue
+	from java.io import PrintWriter, File, FileWriter
 	from javax import swing
 	from java.lang import Runnable
 	from javax.swing import JFileChooser
@@ -24,6 +26,7 @@ try:
 	from javax.swing import JDialog
 	from javax.swing import SwingUtilities
 	from javax.swing import SwingWorker
+	from javax.swing import JFileChooser
 	import java.awt.Cursor
 	# from javax.swing import ScrollEvent
 	from javax.swing.border import EmptyBorder
@@ -36,6 +39,7 @@ try:
 	from java.awt import Dimension
 	from java.awt import GridLayout
 	from java.awt import FlowLayout
+	from java.net import URL, MalformedURLException
 	from java.util import ArrayList
 	import java.lang as lang
 	import re
@@ -47,7 +51,8 @@ try:
 	import urllib2
 	import time
 	from threading import Thread, Event
-# from multiprocessing import Process
+	# from modules import *
+
 except ImportError as e:
 	print e
 	print "Failed to load dependencies. This issue may be caused by using the unstable Jython 2.7 beta.\n"
@@ -79,7 +84,7 @@ class BurpExtender(IBurpExtender, ITab):
 		self.titlePanel = swing.JPanel(FlowLayout(FlowLayout.LEADING, 10, 10))
 
 		# UI Label and target input field
-		self.uiLabel = swing.JLabel('Testssl.sh Burp Wrapper')
+		self.uiLabel = swing.JLabel('Testssl.sh Wrapper')
 		self.uiLabel.setFont(Font('Black', Font.BOLD, 28))
 		self.uiLabel.setForeground(Color(235,136,0))
 		self.titlePanel.add(self.uiLabel)
@@ -92,14 +97,21 @@ class BurpExtender(IBurpExtender, ITab):
 		self.targetInputPanel.add(self.targetTitle)
 		self.targetInput = swing.JTextField('', 20)
 		self.targetInputPanel.add(self.targetInput)
-		self.targetRunButton = swing.JButton('Run regular scan', actionPerformed=self.startRegularSSLScan)
+		self.targetRunButton = swing.JButton('Run Regular Scan', actionPerformed=self.startRegularSSLScan)
 		self.targetInputPanel.add(self.targetRunButton)
-		self.targetSpecificButton = swing.JCheckBox('Scan using specific flags', False)
+		self.targetSpecificButton = swing.JCheckBox('Scan using specific flags (flags separated by a space)', False)
 		self.targetInputPanel.add(self.targetSpecificButton)
 		self.targetSpecificFlagsInput = swing.JTextField('', 20)
 		self.targetInputPanel.add(self.targetSpecificFlagsInput)
 		self.targetSpecificRun = swing.JButton('Run Specific Scan', actionPerformed=self.startSpecificSSLScan)
 		self.targetInputPanel.add(self.targetSpecificRun)
+		if 'Professional' in callbacks.getBurpVersion()[0]:
+			self.addToSitemap = JCheckBox('Add to Site Map', False)
+		else:
+			self.addToSitemap = JCheckBox('Add to Site Map (requires Professional version)', False)
+			self.addToSitemap.setEnabled(False)
+		self.targetInputPanel.add(self.addToSitemap)
+
 		self._topPanel.add(self.targetInputPanel, BorderLayout.LINE_START)
 
 		self._splitpane.setTopComponent(self._topPanel)
@@ -108,20 +120,17 @@ class BurpExtender(IBurpExtender, ITab):
 		self._bottomPanel = swing.JPanel(BorderLayout(10, 10))
 		self._bottomPanel.setBorder(EmptyBorder(10, 0, 0, 0))
 
-		self.initialText = ('<h1 style="color: red">Run at your own risk <br>'
-			' For the time being, do not run scans on ports other than 80 and 443</h1>')
+		self.initialText = ('<h1 style="color: red">'
+			' When running, you may experience crashes. Just deal with it, this is stil a work in progress</h1>')
 		self.currentText = self.initialText
 		self.textPane = swing.JTextPane()
 
 		# self.caret = swing.DefaultCaret
 		self.textScrollPane = swing.JScrollPane(swing.JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,swing.JScrollPane.HORIZONTAL_SCROLLBAR_NEVER)
 		self.textScrollPane.getViewport().setView((self.textPane))
-		# self.vertical = self.textScrollPane.getVerticalScrollBar()
-		# self.vertical.setValue(self.vertical.getMaximum())
 		self.textPane.setContentType("text/html")
 		self.textPane.setText(self.currentText)
 		self.textPane.setEditable(False)
-		# self.textPane.setCaretPosition(self.textPane.getDocument().getLength())
 
 		self._bottomPanel.add(self.textScrollPane, BorderLayout.CENTER)
 
@@ -129,6 +138,10 @@ class BurpExtender(IBurpExtender, ITab):
 
 		self.clearScannedHostButton = swing.JButton('Clear output', actionPerformed=self.clearText)
 		self.savePanel.add(self.clearScannedHostButton)
+
+		self.targetSaveButton = swing.JButton('Save output', actionPerformed=self.saveToFile)
+		self.targetSaveButton.setEnabled(False)
+		self.savePanel.add(self.targetSaveButton)
 
 		self._bottomPanel.add(self.savePanel, BorderLayout.PAGE_END)
 
@@ -197,6 +210,12 @@ class BurpExtender(IBurpExtender, ITab):
 		callbacks.registerContextMenuFactory(self.scannerMenu)
 		print "SSL Scanner custom menu loaded"
 
+		# self.scannerCheck = scannerCheck
+		# callbacks.registerScannerCheck(self.scannerCheck)
+		# print "SSL Scanner Checker loaded"
+
+		self.scannedHost = []
+
 		print 'MOARSSL! extension loaded successfully!'
 
 	def getTabCaption(self):
@@ -206,6 +225,19 @@ class BurpExtender(IBurpExtender, ITab):
 		return self._splitpane  		
 
 	def startRegularSSLScan(self,e):
+
+		self.currentText = self.initialText
+
+		if self.targetSpecificButton.isSelected():
+			self.updateText("<h2>Please un-check the checkbox in order to run a regular scan<h2>")
+			self.targetInputPanel.setEnabled(True)
+			self.targetRunButton.setEnabled(True)
+			self.targetSpecificButton.setEnabled(True)
+			self.targetSpecificFlagsInput.setEnabled(True)
+			self.targetSpecificRun.setEnabled(True)	
+			self.addToSitemap.setEnabled(True)
+			return
+
 		host = str(self.targetInput.text)
 
 		self.scanningEvent.set()
@@ -215,142 +247,235 @@ class BurpExtender(IBurpExtender, ITab):
 		if(len(host) == 0):
 			return
 
-		p = '(?:http.*://)?(?P<host>[^:/ ]+).?(?P<port>[0-9]*).*'
-		m = re.search(p,host)
-		a = m.group('host')
-		b = m.group('port')
-		if b != '':
-			self.c = a + ':' + b
-		else:
-			self.c = a
+		p = '(?P<protocol>http.*://)?(?P<host>[^:/ ]+).?(?P<port>[0-9]*).*'
+		self.connectionTest = ''
 
-		if b == '443':
-			connectionTest = 'https://'
+		m = re.search(p,host)
+		self.site = m.group('host')
+		print "========================================\r\n"
+		print "self.site: " + self.site
+		self.protocol = m.group('protocol')
+		if self.protocol == None:
+			print "No protocol entered"
 		else:
-			connectionTest = 'http://'
+			print "self.protocol: " + self.protocol
+		self.port = m.group('port')
+		print "self.port: " + self.port
+		if self.protocol == 'https://':
+			self.url = self.site + ":" + "443"
+			self.connectionTest = 'https://'
+		elif self.protocol == 'http://':
+			self.updateText("<h2>regular HTTP will cause the program to crash, please enter again<h2>")
+			self.targetInputPanel.setEnabled(True)
+			self.targetRunButton.setEnabled(True)
+			self.targetSpecificButton.setEnabled(True)
+			self.targetSpecificFlagsInput.setEnabled(True)
+			self.targetSpecificRun.setEnabled(True)	
+			self.addToSitemap.setEnabled(True)
+			return
+		elif self.protocol == None:
+			self.url = self.site
+			self.protocol = 'https://'
+			self.connectionText = 'https://'
+		else:
+			self.updateText("<h2>Protocol not found<h2>")
+			return
+		if self.port != '':
+			if self.port == '80':
+				self.updateText("<h2>port 80 cannot be used with testssl, please enter again<h2>")
+				self.targetInputPanel.setEnabled(True)
+				self.targetRunButton.setEnabled(True)
+				self.targetSpecificButton.setEnabled(True)
+				self.targetSpecificFlagsInput.setEnabled(True)
+				self.targetSpecificRun.setEnabled(True)	
+				self.addToSitemap.setEnabled(True)
+				return					
+			elif self.port == '443':
+				self.url = self.site + ":" + self.port
+				self.connectionTest = 'https://'
+			else:
+				self.url = self.site + ":" + self.port
+				self.connectionTest = 'https://'
+		else:
+			self.url = self.site
+			self.connectionTest = 'https://'
+
+		self.fullAddress = self.connectionTest+self.site
+		self.currentText = self.initialText
+
+		print self.fullAddress
+		print self.url
 
 		try:
-			urllib2.urlopen(str(connectionTest+self.c), timeout=1)
+			# req = urllib2.Request(self.fullAddress, headers={'User-Agent' : "Magic Browser"})
+			urllib2.urlopen(str(self.fullAddress))			
+			# self.targetURL = URL(host)
+			# if(self.targetURL.getPort() == -1):
+			# 	self.targetURL = URL("https", self.targetURL.getHost(), 443, "/")
 			self.targetInputPanel.setEnabled(False)
 			self.targetRunButton.setEnabled(False)
 			self.targetSpecificButton.setEnabled(False)
 			self.targetSpecificFlagsInput.setEnabled(False)
-			self.targetSpecificRun.setEnabled(False)				
+			self.targetSpecificRun.setEnabled(False)
+			self.addToSitemap.setEnabled(False)				
 			self.updateText("<h2>Connection made</h2>")
-			self.scannerProcess = Thread(target=self.runRegularSSLScan, args=(self.c,))
+			self.scannerProcess = Thread(target=self.runRegularSSLScan, args=(self.url,))
 			self.scannerProcess2 = Thread(target=self.parseFile)
 			self.scannerProcess.start()
-			time.sleep(2.5)
-			# SwingUtilities.invokeLater(ScannerRunnable(self.parseFile))
+			time.sleep(3)
 			self.scannerProcess2.start()
-			# self.scannerThread = Thread(target=self.runRegularSSLScan, args=(self.c, ))
-			# self.scannerThread.start()
 		except urllib2.URLError as err:
+		# except BaseException as e:
 			self.updateText("<h2>Connection not made, make sure you entered the host correctly<h2>")
 			return
 
 	def runRegularSSLScan(self,url):
 
-# def updateResultText(text):
-# 	if not usingBurpScanner:
-# 		SwingUtilities.invokeLater(ScannerRunnable(self.updateText, (text, )))
-		if self.targetSpecificButton.isSelected():
-			# self.updateResultText("<h2>Please un-check the checkbox in order to run a regular scan<h2>")
-			self.updateText("<h2>Please un-check the checkbox in order to run a regular scan<h2>")
-			# self.scanningEvent.clear()
-			self.targetInputPanel.setEnabled(True)
-			self.targetRunButton.setEnabled(True)
-			self.targetSpecificButton.setEnabled(True)
-			self.targetSpecificFlagsInput.setEnabled(True)
-			self.targetSpecificRun.setEnabled(True)			
-			return
-
 		self.updateText("<h2>Host: " + str(url) + "</h2>")
-		# self.updateResultText("<h2>Host: " + str(url) + "</h2>")
-
-
 		self.updateText("<h2>Running scan, this may take some time..</h2>")
-		# self.updateResultText("<h2>Running scan, this may take some time..</h2>")
 
 		# command = subprocess.check_output(["/opt/testssl.sh/testssl.sh","-oH","/opt/testssl.sh/testing/result.txt","--mapping","rfc","--append",url]) ## For home computer linux vm
 		if self.isWindows:
 			try:
 				command = subprocess.check_output(["wsl",self.convertdPathWindows,"-oH","/mnt/c/Data/Scripts/result.html","--mapping","rfc","--append",url]).replace("\n", "<br>") ## Work computer
-
-				# self.updateText(command)
-				self.targetInputPanel.setEnabled(True)
-				self.targetRunButton.setEnabled(True)
-				self.targetSpecificButton.setEnabled(True)
-				self.targetSpecificFlagsInput.setEnabled(True)
-				self.targetSpecificRun.setEnabled(True)
-				sys.exit()
+				time.sleep(1)
 			except:
-				# self.updateText("<h2>An unexpected error occurred while running the regular scan (Windows) :( Please try again</h2>")
-				self.targetInputPanel.setEnabled(True)
-				self.targetRunButton.setEnabled(True)
-				self.targetSpecificButton.setEnabled(True)
-				self.targetSpecificFlagsInput.setEnabled(True)
-				self.targetSpecificRun.setEnabled(True)
-				sys.exit()
+				self.updateText("<h2>An unexpected error occurred while running the regular scan (Windows) :( Please try again</h2>")
+				time.sleep(1)
 		elif self.isLinux:
 			try:
-				command = subprocess.check_output([self.findPathLinux,"-oH","/root/Desktop/result.html","--mapping","rfc","--append",url]).replace("\n", "<br>")
-				# self.updateText(command)
-				self.targetInputPanel.setEnabled(True)
-				self.targetRunButton.setEnabled(True)
-				self.targetSpecificButton.setEnabled(True)
-				self.targetSpecificFlagsInput.setEnabled(True)
-				self.targetSpecificRun.setEnabled(True)
-				sys.exit()
+				subprocess.check_output([self.findPathLinux,"-oH","/dev/shm/result.html","--mapping","rfc",url]).replace("\n", "<br>")
+				# subprocess.check_output([self.findPathLinux,"-oH","/root/Desktop/result.html","--mapping","rfc","--append",url]).replace("\n", "<br>")
+				time.sleep(1)
+				subprocess.call('echo end >> /dev/shm/result.html', shell=True)
+				time.sleep(1)
 			except:
-				# self.updateText("<h2>An unexpected error occurred while runnning the regular scan (Linux) :( Please try again</h2>")
-				self.targetInputPanel.setEnabled(True)
-				self.targetRunButton.setEnabled(True)
-				self.targetSpecificButton.setEnabled(True)
-				self.targetSpecificFlagsInput.setEnabled(True)
-				self.targetSpecificRun.setEnabled(True)
-				sys.exit()
+				self.updateText("<h2>An unexpected error occurred while runnning the regular scan (Linux) :( Please try again</h2>")
 		else:
-			print "Operating system not detected, can't run program"
 			self.updateText("<h2>An unexpected error occurred, cannot run scan:( Please try again</h2>")
+			time.sleep(1)
+		if self.addToSitemap.isSelected():
+			self.addToScope()
+		else:
+			pass
+		self.targetInputPanel.setEnabled(True)
+		self.targetRunButton.setEnabled(True)
+		self.targetSpecificButton.setEnabled(True)
+		self.targetSpecificFlagsInput.setEnabled(True)
+		self.targetSpecificRun.setEnabled(True)
+		self.addToSitemap.setEnabled(True)
+		self.targetSaveButton.setEnabled(True)
+		time.sleep(1)
+		print "thread successfully terminated"
+		sys.exit()		
+
+	def startSpecificSSLScan(self,e):
+
+		self.currentText = self.initialText
+
+		if not self.targetSpecificButton.isSelected():
+			self.updateText("<h2>Please check the checkbox in order to run specific scans.<h2>")
 			self.targetInputPanel.setEnabled(True)
 			self.targetRunButton.setEnabled(True)
 			self.targetSpecificButton.setEnabled(True)
 			self.targetSpecificFlagsInput.setEnabled(True)
 			self.targetSpecificRun.setEnabled(True)
-			sys.exit()		
+			self.addToSitemap.setEnabled(True)
+			return
 
+		flags = list(str(self.targetSpecificFlagsInput.text).split(" "))
 
-	def startSpecificSSLScan(self,e):
+		moreFlags = list(filter(None, flags))
+
+		if (len(moreFlags)==0):
+			self.updateText("<h2>Please enter at least one flag that you want, separated by a space. </h2>")
+			if self.isWindows:
+				subprocessHelp = ["wsl",self.convertedPathWindows]
+			elif self.isLinux:
+				subprocessHelp = [self.findPathLinux]
+			else:
+				print "Can't do anything, inside specific scan function"
+				return
+			command = subprocess.check_output(subprocessHelp).replace("\n", "<br>")
+			self.targetInputPanel.setEnabled(True)
+			self.targetRunButton.setEnabled(True)
+			self.targetSpecificButton.setEnabled(True)
+			self.targetSpecificFlagsInput.setEnabled(True)
+			self.targetSpecificRun.setEnabled(True)
+			self.addToSitemap.setEnabled(True)
+			return
+
 		host = self.targetInput.text
 
-		if(len(host) == 0):
-			self.updateText("<h2>Please enter a host</h2>")
-			return
-		p = '(?:http.*://)?(?P<host>[^:/ ]+).?(?P<port>[0-9]*).*'
+		p = '(?P<protocol>http.*://)?(?P<host>[^:/ ]+).?(?P<port>[0-9]*).*'
+		self.connectionTest = ''
+
 		m = re.search(p,host)
-		a = m.group('host')
-		b = m.group('port')
-		if b != '':
-			self.c = a + ':' + b
+		self.site = m.group('host')
+		print "========================================\r\n"
+		print "self.site: " + self.site
+		self.protocol = m.group('protocol')
+		if self.protocol == None:
+			print "No protocol entered"
 		else:
-			self.c = a
-
-		if b == '443':
-			connectionTest = 'https://'
+			print "self.protocol: " + self.protocol
+		self.port = m.group('port')
+		print "self.port: " + self.port
+		if self.protocol == 'https://':
+			self.url = self.site + ":" + "443"
+			self.connectionTest = 'https://'
+		elif self.protocol == 'http://':
+			self.updateText("<h2>regular HTTP will cause the program to crash, please enter again<h2>")
+			self.targetInputPanel.setEnabled(True)
+			self.targetRunButton.setEnabled(True)
+			self.targetSpecificButton.setEnabled(True)
+			self.targetSpecificFlagsInput.setEnabled(True)
+			self.targetSpecificRun.setEnabled(True)	
+			self.addToSitemap.setEnabled(True)
+			return
+		elif self.protocol == None:
+			self.url = self.site
+			self.protocol = 'https://'
+			self.connectionText = 'https://'
 		else:
-			connectionTest = 'http://'
+			self.updateText("<h2>Protocol not found<h2>")
+			return
+		if self.port != '':
+			if self.port == '80':
+				self.updateText("<h2>port 80 cannot be used with testssl, please enter again<h2>")
+				self.targetInputPanel.setEnabled(True)
+				self.targetRunButton.setEnabled(True)
+				self.targetSpecificButton.setEnabled(True)
+				self.targetSpecificFlagsInput.setEnabled(True)
+				self.targetSpecificRun.setEnabled(True)	
+				self.addToSitemap.setEnabled(True)
+				return					
+			elif self.port == '443':
+				self.url = self.site + ":" + self.port
+				self.connectionTest = 'https://'
+			else:
+				self.url = self.site + ":" + self.port
+				self.connectionTest = 'https://'
+		else:
+			self.url = self.site
+			self.connectionTest = 'https://'
 
+		self.fullAddress = self.connectionTest+self.site
+		self.currentText = self.initialText
 
+		print self.fullAddress
+		print self.url
 		try:
-			urllib2.urlopen(str(connectionTest+self.c), timeout=1)
+			# req = urllib2.Request(str(self.fullAddress), headers={'User-Agent' : "Magic Browser"})
+			urllib2.urlopen(str(self.fullAddress))
 			self.targetInputPanel.setEnabled(False)
 			self.targetRunButton.setEnabled(False)
 			self.targetSpecificButton.setEnabled(False)
 			self.targetSpecificFlagsInput.setEnabled(False)
-			self.targetSpecificRun.setEnabled(False)				
+			self.targetSpecificRun.setEnabled(False)
+			self.addToSitemap.setEnabled(False)					
 			self.updateText("<h2>Connection made</h2>")
-			self.scannerProcess = Thread(target=self.runSpecificSSLScan, args=(self.c,))
+			self.scannerProcess = Thread(target=self.runSpecificSSLScan, args=(self.url,))
 			self.scannerProcess2 = Thread(target=self.parseFile)
 			self.scannerProcess.start()
 			time.sleep(3)
@@ -361,31 +486,13 @@ class BurpExtender(IBurpExtender, ITab):
 
 
 	def runSpecificSSLScan(self,url):
-		if not self.targetSpecificButton.isSelected():
-			self.updateText("<h2>Please check the checkbox in order to run specific scans.<h2>")
-			self.targetInputPanel.setEnabled(True)
-			self.targetRunButton.setEnabled(True)
-			self.targetSpecificButton.setEnabled(True)
-			self.targetSpecificFlagsInput.setEnabled(True)
-			self.targetSpecificRun.setEnabled(True)
-			return
+
+		flags = list(str(self.targetSpecificFlagsInput.text).split(" "))
+
+		moreFlags = list(filter(None, flags))
 
 		try:
 			self.updateText("<h2>Host: " + str(url) + "</h2>")
-			flags = list(str(self.targetSpecificFlagsInput.text).split(" "))
-
-			moreFlags = list(filter(None, flags))
-
-			print moreFlags
-
-			if (len(moreFlags)==0):
-				self.updateText("<h2>Please enter at least one flag that you want, separated by a space. Click the help button to see the available flags</h2>")
-				self.targetInputPanel.setEnabled(True)
-				self.targetRunButton.setEnabled(True)
-				self.targetSpecificButton.setEnabled(True)
-				self.targetSpecificFlagsInput.setEnabled(True)
-				self.targetSpecificRun.setEnabled(True)
-				return
 
 			self.updateText("<h2>Starting scan, this may take some time</h2>")
 
@@ -483,6 +590,7 @@ class BurpExtender(IBurpExtender, ITab):
 				### --warnings, --mapping, --color, and --debug need to be dicts to handle the responses
 				### --logfile, --jsonfile, and --csvfile need to be dicts to handle the responses
 			infoFlagCheck = False
+			wrongInput = False
 
 			# subprocessArguments = ["/opt/testssl.sh/testssl.sh","--color",str(0)] ## Home linux vm testing
 			# subprocessHelp = ["/opt/testssl.sh/testssl.sh"] ## Home linux vm testing
@@ -490,137 +598,181 @@ class BurpExtender(IBurpExtender, ITab):
 				subprocessArguments = ["wsl",self.convertedPathWindows]
 				subprocessHelp = ["wsl",self.convertedPathWindows]
 			elif self.isLinux:
-				subprocessArguments = [self.findPathLinux,"-oH","/root/Desktop/result.html"]
+				subprocessArguments = [self.findPathLinux,"-oH","/dev/shm/result.html","--mapping","rfc"]
 				subprocessHelp = [self.findPathLinux]
 			else:
 				print "Can't do anything, inside specific scan function"
-			# lst1 = []
-			# lst2 = []
+				return
 
-			if len(moreFlags) == 0:
-				print "Nothing in list"
-				self.updateText("<h1>Please enter in additional flags. See below for a list\n</h2>")
-				command = subprocess.check_output(subprocessHelp).replace("\n", "<br>")
-
-			elif len(moreFlags) == 1:
+			if len(moreFlags) == 1:
 
 				if moreFlags[0] in informationOptions:
-					print "Single item detected in information options"
-					subprocessArguments.append(moreFlags[0])
-					command = subprocess.check_output(subprocessArguments).replace("\n", "<br>")
-
+					infoFlagCheck = True
+					subprocessHelp.append(moreFlags[0])
 				elif moreFlags[0] in allOptions:
-					print "Single item detected in all options"
 					subprocessArguments.append(moreFlags[0])
+					print subprocessArguments
+				else:
+					wrongInput = True
+					self.updateText("<h2>The input entered is not a valid flag for testssl. Please enter input again<h2>")
+			else:
+				for i in moreFlags:
+					if i in informationOptions:
+						infoFlagCheck = True
+						subprocessHelp.append(i)
+						print subprocessHelp
+					elif i in allOptions:
+						subprocessArguments.append(i)
+					else:
+						wrongInput = True
+						self.updateText("<h2>A flag that was entered is not a recognized flag for testssl, please enter again</h2>")
+
+			if wrongInput == True:
+				subprocessHelp = [self.findPathLinux]
+				print subprocessHelp
+				command = subprocess.check_output(subprocessHelp).replace("\n", "<br>")
+				self.updateText(command)
+			else:
+				if infoFlagCheck == True:
+					command = subprocess.check_output(subprocessHelp).replace("\n", "<br>")
+					self.updateText(command)
+				else:
 					subprocessArguments.append(str(url))
 					print subprocessArguments
 					command = subprocess.check_output(subprocessArguments).replace("\n", "<br>")
-
-
-				else:
-					self.updateText("<h2>The input entered is not a valid flag for testssl. Please enter input again<h2>")
-					command = subprocess.check_output(subprocessHelp).replace("\n", "<br>")
-					print "input entered is not part of testssl"
-
+					subprocess.check_output('echo end >> /dev/shm/result.html', shell=True)	
+			if self.addToSitemap.isSelected():
+				print "adding to sitemap"
+				self.addToScope()
 			else:
-				print "Multiple items in list"
-
-				for i in moreFlags:
-					if i in informationOptions:
-						print "Item found in information options"
-						infoFlagCheck = True
-						subprocessArguments.append(i)
-
-					elif i in allOptions:
-						print "Item found in all options"
-						subprocessArguments.append(i)
-					else:
-						self.updateText("<h2>A flag that was entered is not a recognized flag for testssl, please enter again</h2>")
-						command = subprocess.check_output(subprocessHelp).replace("\n", "<br>")
-						print "Item was not found at all"
-
-			if infoFlagCheck == False:
-				subprocessArguments.append(str(url))
-				print subprocessArguments
-				command = subprocess.check_output(subprocessArguments).replace("\n", "<br>")
-			else:
-				print subprocessArguments
-				command = subprocess.check_output(subprocessArguments).replace("\n", "<br>")
-
-				print subprocessArguments
+				pass			
 			self.targetInputPanel.setEnabled(True)
 			self.targetRunButton.setEnabled(True)
 			self.targetSpecificButton.setEnabled(True)
 			self.targetSpecificFlagsInput.setEnabled(True)
 			self.targetSpecificRun.setEnabled(True)	
-			sys.exit()			
-
+			self.addToSitemap.setEnabled(True)
+			self.targetSaveButton.setEnabled(True)
+			print "Thread1 successfully terminated"
+			time.sleep(2)
 		except:
-			print "An unexpected error occurred... :( NEED TO FIX SPECIFIC SCAN, THE EXCEPT STATEMENT IS RUNNING AND I DON'T KNOW WHY!! "
-			# self.updateText("<h2>An unexpected error occurred... :( Please try again. Make sure if you're entering additional flags that you enter them correctly</h2>")
+			self.updateText("<h2>An unexpected error occurred... :( Please try again. Make sure if you're entering additional flags that you enter them correctly</h2>")
 			self.targetInputPanel.setEnabled(True)
 			self.targetRunButton.setEnabled(True)
 			self.targetSpecificButton.setEnabled(True)
 			self.targetSpecificFlagsInput.setEnabled(True)
 			self.targetSpecificRun.setEnabled(True)	
-			sys.exit()
+			self.addToSitemap.setEnabled(True)
+			self.targetSaveButton.setEnabled(True)
+			time.sleep(2)
+		sys.exit()
 
-	# def parseFile(self, usingBurpScanner=False):
 	def parseFile(self):
-
-		# def updateResultText(text):
-		# 	if not usingBurpScanner:
-		# 		SwingUtilities.invokeLater(ScannerRunnable(self.updateText, (text, )))
-
+		Crying = True
 		blacklist = ['<?','<!','<html','</html','<head','</head','<body','</body','<pre','<pre','<title','</title','<meta','</meta']
-		# filePath = '/opt/testssl.sh/testing/result.txt'
-		print "Inside parseFile function"
 		if self.isWindows:
 			filePath = 'C:\\Data\\Scripts\\result.html'
 		elif self.isLinux:
-			filePath = '/root/Desktop/result.html'
-			print "Testing"
+			filePath = '/dev/shm/result.html'
 		else:
 			print "Can't do anything, inside parseFile function"
+			print filePath
 		try:
 			with open(filePath) as fileName:
-				print "File found"
-				timeout = time.time() + 60*5
-				while time.time() < timeout:
-					data = fileName.readlines()
-					for line in data:
+				line_found = False
+				while Crying:
+					for line in fileName:
 						if line == 0:
-							time.sleep(.1)
 							continue
 						elif line.startswith(tuple(blacklist)):
-							time.sleep(.1)
 							continue
+						elif line.startswith('end'):
+							if self.addToSitemap.isSelected():
+								self.isBEAST()
+							Crying = False
 						else:
 							newLine=line+"<br>"
 							self.updateText(newLine)
-							time.sleep(.1)
 				if self.isWindows:
-					subprocess.check_output(["del","C:\\Data\\Scripts\\result.html"], shell=True)
-					sys.exit()
+					subprocess.call('del C:\\Data\\Scripts\\result.html', shell=True)
 				elif self.isLinux:
-					subprocess.check_output(["rm","/root/Desktop/result.html"], shell=True)
-					sys.exit()
+					subprocess.call('rm /dev/shm/result.html', shell=True)
+					print "file was deleted"
 				else:
-					print "Can't do anything, no file exists"
-					sys.exit()
+					print "Program shouldn't be running cuz the OS wasn't detected.."
+					time.sleep(2)
 		except:
-			print "File not found :("
 			if self.isWindows:
-				subprocess.check_output(["del","C:\\Data\\Scripts\\result.html"], shell=True)
+				subprocess.call('del C:\\Data\\Scripts\\result.html', shell=True)
 			elif self.isLinux:
-				subprocess.check_output(["rm","/root/Desktop/result.html"], shell=True)
+				subprocess.call('rm /dev/shm/result.html', shell=True)
 			else:
-				print "Can't do anything, no file exists"
 				self.ResultText("<h1>An unexpected error occurred while reading and outputing the results :(")
+		print "thread2 successfully terminated"
+		sys.exit()
 
-				sys.exit()
-			# self.scanningEvent2.clear()
-			# updateResultText("<h1>An unexpected error occurred while reading and outputing the results :(")
+	def isBEAST(self):
+		if self.isWindows:
+			filePath = 'C:\\Data\\Scripts\\result.html'
+		elif self.isLinux:
+			filePath = '/dev/shm/result.html'
+		else:
+			print "Can't do anything, inside parseFile function"
+			print filePath
+		extraLine = ''
+		newLine = ''
+		ciphers = ''
+		self.beastCiphers = ''
+		found_type = False
+		try:
+			with open(filePath) as fileName:
+				for line in fileName:
+					if 'BEAST' in line:
+						found_type = True
+						newLine = str(line)
+						continue
+					if found_type:
+						if 'but also supports higher protocols' in line:
+							found_type = False
+						else:
+							extraLine += str(line).rstrip('\n')
+							ciphers = newLine + extraLine
+				match = re.findall('(TLS_\S+)', ciphers.replace('\n',' '))
+				for group in match:
+					self.beastCiphers += str(group + '\n')
+			if self.beastCiphers == -1:
+				print "No ciphers found"
+			else:
+				print "Site is vulnerable to BEAST\r\n"
+			print "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r"
+			print "Issue: Site uses ciphers that are vulnerable to BEAST attack"
+			print "Severity: Medium"
+			print "Confidence: Certain"
+			print "URL: " + str(self.url)
+			print "\r\nIssue Description: "
+			print "CBC-mode ciphers are used in conjunction with TLSv1.0, which are vulnerable to the BEAST "
+			print "attack, although the attack also relies on the attacker being able to force the browser "
+			print "to generate many thousands of chosen plaintext through a malicious applet or cross-site "
+			print "scripting. Additionally all modern browsers now provide mitigations for this attack.\r\n"
+			print "Ciphers using the Cipher Block Chaining mode of operation in TLSv1.0 and SSLv3 are vulnerable "
+			print "to an attack that could allow for the contents of encrypted communications to be retrieved. "
+			print "For the attack to succeed, an attacker must be able to inject arbitrary plaintext into "
+			print "communications between users and a server, e.g., using a malicious applet or a "
+			print "Cross-Site-Scripting (XSS) vulnerability, and then observe the corresponding cipher texts. "
+			print "Given several thousand requests, an attacker can then use this to determine the subsequent "
+			print "plaintext blocks by encrypting the same messages multiple times. The vulnerability has been "
+			print "fixed as of TLSv1.1 and client-side mitigations have been implemented by all current browsers. \r\n"
+			print "List of BEAST Ciphers: "
+			print "=========================================================\r\n"
+			print "TLSv1: "
+			print self.beastCiphers
+			print "========================================================="
+			print "\r\nIssue Remediation: "
+			print "Remove Support for Weak Ciphers "
+			print "Do something"
+			print "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r"
+		except:
+			print "something went wrong"
 
 	def updateText(self, stringToAppend):
 		self.currentText += str(stringToAppend)
@@ -628,9 +780,67 @@ class BurpExtender(IBurpExtender, ITab):
 		self.textPane.setCaretPosition(self.textPane.getDocument().getLength())
 
 	def clearText(self, e):
-		self.currentText = ('<h1 style="color: red">Run at your own risk <br>'
-			' For the time being, do not run scans on ports other than 80 and 443</h1>')
+		self.currentText = ('<h1 style="color: red">'
+			' When running, you may experience crashes. Just deal with it, this is stil a work in progress</h1>')
 		self.textPane.setText(self.currentText)
+		self.targetSaveButton.setEnabled(False)
+
+	def saveToFile(self, event):
+		fileChooser = JFileChooser()
+		if not (self.url is None):
+			fileChooser.setSelectedFile(File("Scan_Output_%s.html" \
+				% (str(self.url))))
+		else:
+			fileChooser.setSelectedFile(File("Scan_Output.html"))
+		if (fileChooser.showSaveDialog(self.getUiComponent()) == JFileChooser.APPROVE_OPTION):
+			fw = FileWriter(fileChooser.getSelectedFile())
+			fw.write(self.textPane.getText())
+			fw.flush()
+			fw.close()
+
+	def addToScope(self):
+		print "making new request"
+		if self.port == '':
+			self.port = "443"
+		fullSiteString = self.protocol + self.site + ":" + self.port + "/"
+		print fullSiteString
+		finalURL = URL(fullSiteString)
+		# print finalURL
+		newRequest = self._helpers.buildHttpRequest(finalURL)
+		print "new request made"
+		try:
+			print "\r\n\r\n\r\n\r\n\r\n\r\n\r"
+			print "creating requestResponse"
+			requestResponse = self._callbacks.makeHttpRequest(self._helpers.buildHttpService(str(finalURL.getHost()), int(self.port), str(finalURL.getProtocol()) == "https"), newRequest)
+			# builtService = self._helpers.buildHttpService(str(finalURL.getHost()), int(self.port), str(finalURL.getProtocol()) == "https")
+			# requestResponse = self._callbacks.makeHttpRequest(builtService, newRequest)
+			# print "requestResponse works"
+			if not requestResponse.getResponse() == None:
+				print "Something was received"
+				# if not self._callbacks.(finalURL):
+				# self.updateText("<h2>Adding site to sitemap<h2>")
+				self.addedToSiteMap = self._callbacks.addToSiteMap(requestResponse)
+				print "added to sitemap"
+				if self.beastCiphers != None:
+					print "There are ciphers vulnerable to BEAST"						
+					issue = CustomIssue(
+						requestResponse.getHttpService(),
+						self._helpers.analyzeRequest(requestResponse).getUrl(),
+						"Ciphers vulnerable to BEAST\r\n" + self.beastCiphers + ".",
+						"BEAST attack",
+						"Text",
+						"Medium")
+					print "issue made"
+					print issue
+					self.issueAdded = self._callbacks.addScanIssue(issue)
+					print "issue added"
+				else:
+					print "No vulns were found"
+			else:	
+				self.updateText("<h2>Unable to add site to sitemap for some reason..<h2>")
+				print "Nothing was received"
+		except:
+				print "error adding issue"
 
 class ScannerMenu(IContextMenuFactory):
 	def __init__(self, scannerInstance):
@@ -653,19 +863,46 @@ class ScannerMenu(IContextMenuFactory):
 				except:
 					self.scannerInstance._callbacks.issueAlert("Cannot get URL from the currently selected message " + str(sys.exc_info()[0]) + " " + str(sys.exc_info()[1]))
 				else:
-					self.scannerInstance._callbacks.issueAlert("The selected request is not there.. :(")
+					self.scannerInstance._callbacks.issueAlert("The selected request is not there")
 
-# class ScannerRunnable(Runnable):
-# 	def __init__(self, runFunction):
-# 		self._runFunction = runFunction
+class CustomIssue(IScanIssue):
+    def __init__(self, httpService, url, httpMessages, name, detail, severity):
+        self._httpService = httpService
+        self._url = url
+        self._httpMessages = httpMessages
+        self._name = name
+        self._detail = detail
+        self._severity = severity
 
-# 	def run(self):
-# 		self._runFunction()
+    def getUrl(self):
+        return self._url
 
-# class ScannerRunnable(Runnable):
-# 	def __init__(self, func, args):
-# 		self.func = func
-# 		self.args = args
+    def getIssueName(self):
+        return self._name
 
-# 	def run(self):
-# 		self.func(*self.args)
+    def getIssueType(self):
+        return 0
+
+    def getSeverity(self):
+        return self._severity
+
+    def getConfidence(self):
+        return "Certain"
+
+    def getIssueBackground(self):
+        pass
+
+    def getRemediationBackground(self):
+        pass
+
+    def getIssueDetail(self):
+        return self._detail
+
+    def getRemediationDetail(self):
+        pass
+
+    def getHttpMessages(self):
+        return self._httpMessages
+
+    def getHttpService(self):
+		return self._httpService
