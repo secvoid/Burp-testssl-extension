@@ -121,7 +121,9 @@ class BurpExtender(IBurpExtender, ITab):
 		self._bottomPanel.setBorder(EmptyBorder(10, 0, 0, 0))
 
 		self.initialText = ('<h1 style="color: red">'
-			' When running, you may experience crashes. Just deal with it, this is stil a work in progress</h1>')
+			' When running, you may experience crashes. Just deal with it, this is stil a work in progress<br>'
+			' Make sure you have testssl installed in the /opt directory for Linux or ___ for Windows<br>'
+			' In addition, make sure you have /dev/shm on your machine</h2>')
 		self.currentText = self.initialText
 		self.textPane = swing.JTextPane()
 
@@ -188,16 +190,16 @@ class BurpExtender(IBurpExtender, ITab):
 
 		elif self.isLinux:
 			print "Checking for dependencies, this may take a minute...\n"
-			# if "testssl.sh" in subprocess.check_output(["find","/","-name","testssl.sh"]):
-			if 'testssl.sh' in 'testssl.sh':
-				# findPath = subprocess.check_output(["find","/","-name","testssl.sh"]).split('\n')[0]
-
-				# self.findPathLinux = str(findPath).lstrip()
-				self.findPathLinux = '/opt/testssl.sh/testssl.sh'
-				#self.findPath3 = self.findPath2.split(" ")[0]
-				#self.testSSLPath = self.findPath3.strip()
-				#print self.testSSLPathLinux
-				print self.findPathLinux
+			# if "testssl.sh" in subprocess.check_output(["find","/opt","-name","testssl.sh","-type","-f"]):
+			# if 'testssl.sh' in 'testssl.sh':
+			findPath = subprocess.check_output(["find","/opt","-name","testssl.sh","-type","f"]).split('\n')[0]
+			self.findPath2 = str(findPath).lstrip()
+			# self.findPathLinux = '/opt/testssl.sh/testssl.sh'
+			self.findPath3 = self.findPath2.split(" ")[0]
+			self.testSSLPath = self.findPath3.strip()
+			print self.testSSLPath
+				# print self.findPathLinux
+			if self.testSSLPath != 0:
 				print "testssl.sh found.\n"
 			else:
 				print "testssl.sh doesn't appear to be installed. If you try and use the extension now, you're gonna have a bad time. Please install it from github\n"
@@ -210,11 +212,7 @@ class BurpExtender(IBurpExtender, ITab):
 		callbacks.registerContextMenuFactory(self.scannerMenu)
 		print "SSL Scanner custom menu loaded"
 
-		# self.scannerCheck = scannerCheck
-		# callbacks.registerScannerCheck(self.scannerCheck)
-		# print "SSL Scanner Checker loaded"
-
-		self.scannedHost = []
+		# self.scannedHost = []
 
 		print 'MOARSSL! extension loaded successfully!'
 
@@ -248,24 +246,18 @@ class BurpExtender(IBurpExtender, ITab):
 			return
 
 		p = '(?P<protocol>http.*://)?(?P<host>[^:/ ]+).?(?P<port>[0-9]*).*'
-		self.connectionTest = ''
-
 		m = re.search(p,host)
 		self.site = m.group('host')
-		print "========================================\r\n"
-		print "self.site: " + self.site
 		self.protocol = m.group('protocol')
-		if self.protocol == None:
-			print "No protocol entered"
-		else:
-			print "self.protocol: " + self.protocol
 		self.port = m.group('port')
-		print "self.port: " + self.port
+
+		if host.find("://") == -1:
+			self.connectionHost = "https://" + host
+
 		if self.protocol == 'https://':
-			self.url = self.site + ":" + "443"
-			self.connectionTest = 'https://'
+			pass
 		elif self.protocol == 'http://':
-			self.updateText("<h2>regular HTTP will cause the program to crash, please enter again<h2>")
+			self.updateText("<h2>regular HTTP will cause the program to crash, please enter again</h2>")
 			self.targetInputPanel.setEnabled(True)
 			self.targetRunButton.setEnabled(True)
 			self.targetSpecificButton.setEnabled(True)
@@ -274,12 +266,17 @@ class BurpExtender(IBurpExtender, ITab):
 			self.addToSitemap.setEnabled(True)
 			return
 		elif self.protocol == None:
-			self.url = self.site
 			self.protocol = 'https://'
-			self.connectionText = 'https://'
 		else:
-			self.updateText("<h2>Protocol not found<h2>")
-			return
+			self.updateText("<h2>Something weird happened.. Check the protocol you entered</h2>")
+			self.targetInputPanel.setEnabled(True)
+			self.targetRunButton.setEnabled(True)
+			self.targetSpecificButton.setEnabled(True)
+			self.targetSpecificFlagsInput.setEnabled(True)
+			self.targetSpecificRun.setEnabled(True)	
+			self.addToSitemap.setEnabled(True)
+			return			
+
 		if self.port != '':
 			if self.port == '80':
 				self.updateText("<h2>port 80 cannot be used with testssl, please enter again<h2>")
@@ -291,27 +288,17 @@ class BurpExtender(IBurpExtender, ITab):
 				self.addToSitemap.setEnabled(True)
 				return					
 			elif self.port == '443':
-				self.url = self.site + ":" + self.port
-				self.connectionTest = 'https://'
+				self.connectionHost = "https://" + self.site + ":" + self.port
 			else:
-				self.url = self.site + ":" + self.port
-				self.connectionTest = 'https://'
+				self.connectionHost = self.site + ":" + self.port
 		else:
-			self.url = self.site
-			self.connectionTest = 'https://'
+			self.port == '443'
 
-		self.fullAddress = self.connectionTest+self.site
-		self.currentText = self.initialText
-
-		print self.fullAddress
-		print self.url
-
-		try:
-			# req = urllib2.Request(self.fullAddress, headers={'User-Agent' : "Magic Browser"})
-			urllib2.urlopen(str(self.fullAddress))			
-			# self.targetURL = URL(host)
-			# if(self.targetURL.getPort() == -1):
-			# 	self.targetURL = URL("https", self.targetURL.getHost(), 443, "/")
+		try:		
+			self.targetURL = URL(self.connectionHost)
+			print self.targetURL
+			if(self.targetURL.getPort() == -1):
+				self.targetURL = URL("https", self.targetURL.getHost(), 443, "/")
 			self.targetInputPanel.setEnabled(False)
 			self.targetRunButton.setEnabled(False)
 			self.targetSpecificButton.setEnabled(False)
@@ -319,32 +306,32 @@ class BurpExtender(IBurpExtender, ITab):
 			self.targetSpecificRun.setEnabled(False)
 			self.addToSitemap.setEnabled(False)				
 			self.updateText("<h2>Connection made</h2>")
-			self.scannerProcess = Thread(target=self.runRegularSSLScan, args=(self.url,))
+			# self.scannerProcess = Thread(target=self.runRegularSSLScan, args=(self.url,))
+			self.scannerProcess = Thread(target=self.runRegularSSLScan, args=(self.connectionHost,))			
 			self.scannerProcess2 = Thread(target=self.parseFile)
 			self.scannerProcess.start()
 			time.sleep(3)
 			self.scannerProcess2.start()
-		except urllib2.URLError as err:
-		# except BaseException as e:
+		except:
 			self.updateText("<h2>Connection not made, make sure you entered the host correctly<h2>")
 			return
 
-	def runRegularSSLScan(self,url):
-
-		self.updateText("<h2>Host: " + str(url) + "</h2>")
+	def runRegularSSLScan(self,connectionHost):
+		# self.updateText("<h2>Host: " + str(url) + "</h2>")
+		self.updateText("<h2>Host: " + str(connectionHost) + "</h2>")
 		self.updateText("<h2>Running scan, this may take some time..</h2>")
 
 		# command = subprocess.check_output(["/opt/testssl.sh/testssl.sh","-oH","/opt/testssl.sh/testing/result.txt","--mapping","rfc","--append",url]) ## For home computer linux vm
 		if self.isWindows:
 			try:
-				command = subprocess.check_output(["wsl",self.convertdPathWindows,"-oH","/mnt/c/Data/Scripts/result.html","--mapping","rfc","--append",url]).replace("\n", "<br>") ## Work computer
+				command = subprocess.check_output(["wsl",self.convertdPathWindows,"-oH","/mnt/c/Data/Scripts/result.html","--mapping","rfc","--append",connectionHost]).replace("\n", "<br>") ## Work computer
 				time.sleep(1)
 			except:
 				self.updateText("<h2>An unexpected error occurred while running the regular scan (Windows) :( Please try again</h2>")
 				time.sleep(1)
 		elif self.isLinux:
 			try:
-				subprocess.check_output([self.findPathLinux,"-oH","/dev/shm/result.html","--mapping","rfc",url]).replace("\n", "<br>")
+				subprocess.check_output([self.testSSLPath,"-oH","/dev/shm/result.html","--mapping","rfc","-A",connectionHost]).replace("\n", "<br>")
 				# subprocess.check_output([self.findPathLinux,"-oH","/root/Desktop/result.html","--mapping","rfc","--append",url]).replace("\n", "<br>")
 				time.sleep(1)
 				subprocess.call('echo end >> /dev/shm/result.html', shell=True)
@@ -392,7 +379,7 @@ class BurpExtender(IBurpExtender, ITab):
 			if self.isWindows:
 				subprocessHelp = ["wsl",self.convertedPathWindows]
 			elif self.isLinux:
-				subprocessHelp = [self.findPathLinux]
+				subprocessHelp = [self.testSSLPath]
 			else:
 				print "Can't do anything, inside specific scan function"
 				return
@@ -407,25 +394,22 @@ class BurpExtender(IBurpExtender, ITab):
 
 		host = self.targetInput.text
 
-		p = '(?P<protocol>http.*://)?(?P<host>[^:/ ]+).?(?P<port>[0-9]*).*'
-		self.connectionTest = ''
+		if(len(host) == 0):
+			return
 
+		p = '(?P<protocol>http.*://)?(?P<host>[^:/ ]+).?(?P<port>[0-9]*).*'
 		m = re.search(p,host)
 		self.site = m.group('host')
-		print "========================================\r\n"
-		print "self.site: " + self.site
 		self.protocol = m.group('protocol')
-		if self.protocol == None:
-			print "No protocol entered"
-		else:
-			print "self.protocol: " + self.protocol
 		self.port = m.group('port')
-		print "self.port: " + self.port
+
+		if host.find("://") == -1:
+			self.connectionHost = "https://" + host
+
 		if self.protocol == 'https://':
-			self.url = self.site + ":" + "443"
-			self.connectionTest = 'https://'
+			pass
 		elif self.protocol == 'http://':
-			self.updateText("<h2>regular HTTP will cause the program to crash, please enter again<h2>")
+			self.updateText("<h2>regular HTTP will cause the program to crash, please enter again</h2>")
 			self.targetInputPanel.setEnabled(True)
 			self.targetRunButton.setEnabled(True)
 			self.targetSpecificButton.setEnabled(True)
@@ -434,12 +418,17 @@ class BurpExtender(IBurpExtender, ITab):
 			self.addToSitemap.setEnabled(True)
 			return
 		elif self.protocol == None:
-			self.url = self.site
 			self.protocol = 'https://'
-			self.connectionText = 'https://'
 		else:
-			self.updateText("<h2>Protocol not found<h2>")
-			return
+			self.updateText("<h2>Something weird happened.. Check the protocol you entered</h2>")
+			self.targetInputPanel.setEnabled(True)
+			self.targetRunButton.setEnabled(True)
+			self.targetSpecificButton.setEnabled(True)
+			self.targetSpecificFlagsInput.setEnabled(True)
+			self.targetSpecificRun.setEnabled(True)	
+			self.addToSitemap.setEnabled(True)
+			return			
+
 		if self.port != '':
 			if self.port == '80':
 				self.updateText("<h2>port 80 cannot be used with testssl, please enter again<h2>")
@@ -451,23 +440,16 @@ class BurpExtender(IBurpExtender, ITab):
 				self.addToSitemap.setEnabled(True)
 				return					
 			elif self.port == '443':
-				self.url = self.site + ":" + self.port
-				self.connectionTest = 'https://'
+				self.connectionHost = "https://" + self.site + ":" + self.port
 			else:
-				self.url = self.site + ":" + self.port
-				self.connectionTest = 'https://'
+				self.connectionHost = self.site + ":" + self.port
 		else:
-			self.url = self.site
-			self.connectionTest = 'https://'
+			self.port == '443'
 
-		self.fullAddress = self.connectionTest+self.site
-		self.currentText = self.initialText
-
-		print self.fullAddress
-		print self.url
 		try:
-			# req = urllib2.Request(str(self.fullAddress), headers={'User-Agent' : "Magic Browser"})
-			urllib2.urlopen(str(self.fullAddress))
+			self.targetURL = URL(self.connectionHost)
+			if(self.targetURL.getPort() == -1):
+				self.targetURL = URL("https", self.targetURL.getHost(), 443, "/")
 			self.targetInputPanel.setEnabled(False)
 			self.targetRunButton.setEnabled(False)
 			self.targetSpecificButton.setEnabled(False)
@@ -475,24 +457,23 @@ class BurpExtender(IBurpExtender, ITab):
 			self.targetSpecificRun.setEnabled(False)
 			self.addToSitemap.setEnabled(False)					
 			self.updateText("<h2>Connection made</h2>")
-			self.scannerProcess = Thread(target=self.runSpecificSSLScan, args=(self.url,))
+			self.scannerProcess = Thread(target=self.runSpecificSSLScan, args=(self.connectionHost,))
 			self.scannerProcess2 = Thread(target=self.parseFile)
 			self.scannerProcess.start()
 			time.sleep(3)
 			self.scannerProcess2.start()
-		except urllib2.URLError as err:
+		except:
 			self.updateText("<h2>Connection not made, make sure you entered the host correctly<h2>")
 			return
 
-
-	def runSpecificSSLScan(self,url):
+	def runSpecificSSLScan(self,connectionHost):
 
 		flags = list(str(self.targetSpecificFlagsInput.text).split(" "))
 
 		moreFlags = list(filter(None, flags))
 
 		try:
-			self.updateText("<h2>Host: " + str(url) + "</h2>")
+			self.updateText("<h2>Host: " + str(connectionHost) + "</h2>")
 
 			self.updateText("<h2>Starting scan, this may take some time</h2>")
 
@@ -637,7 +618,7 @@ class BurpExtender(IBurpExtender, ITab):
 					command = subprocess.check_output(subprocessHelp).replace("\n", "<br>")
 					self.updateText(command)
 				else:
-					subprocessArguments.append(str(url))
+					subprocessArguments.append(str(connectionHost))
 					print subprocessArguments
 					command = subprocess.check_output(subprocessArguments).replace("\n", "<br>")
 					subprocess.check_output('echo end >> /dev/shm/result.html', shell=True)	
@@ -740,37 +721,37 @@ class BurpExtender(IBurpExtender, ITab):
 				match = re.findall('(TLS_\S+)', ciphers.replace('\n',' '))
 				for group in match:
 					self.beastCiphers += str(group + '\n')
-			if self.beastCiphers == -1:
-				print "No ciphers found"
-			else:
-				print "Site is vulnerable to BEAST\r\n"
-			print "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r"
-			print "Issue: Site uses ciphers that are vulnerable to BEAST attack"
-			print "Severity: Medium"
-			print "Confidence: Certain"
-			print "URL: " + str(self.url)
-			print "\r\nIssue Description: "
-			print "CBC-mode ciphers are used in conjunction with TLSv1.0, which are vulnerable to the BEAST "
-			print "attack, although the attack also relies on the attacker being able to force the browser "
-			print "to generate many thousands of chosen plaintext through a malicious applet or cross-site "
-			print "scripting. Additionally all modern browsers now provide mitigations for this attack.\r\n"
-			print "Ciphers using the Cipher Block Chaining mode of operation in TLSv1.0 and SSLv3 are vulnerable "
-			print "to an attack that could allow for the contents of encrypted communications to be retrieved. "
-			print "For the attack to succeed, an attacker must be able to inject arbitrary plaintext into "
-			print "communications between users and a server, e.g., using a malicious applet or a "
-			print "Cross-Site-Scripting (XSS) vulnerability, and then observe the corresponding cipher texts. "
-			print "Given several thousand requests, an attacker can then use this to determine the subsequent "
-			print "plaintext blocks by encrypting the same messages multiple times. The vulnerability has been "
-			print "fixed as of TLSv1.1 and client-side mitigations have been implemented by all current browsers. \r\n"
-			print "List of BEAST Ciphers: "
-			print "=========================================================\r\n"
-			print "TLSv1: "
-			print self.beastCiphers
-			print "========================================================="
-			print "\r\nIssue Remediation: "
-			print "Remove Support for Weak Ciphers "
-			print "Do something"
-			print "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r"
+			# if self.beastCiphers == -1:
+			# 	print "No ciphers found"
+			# else:
+			# 	print "Site is vulnerable to BEAST\r\n"
+			# 	print "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r"
+			# 	print "Issue: Site uses ciphers that are vulnerable to BEAST attack"
+			# 	print "Severity: Medium"
+			# 	print "Confidence: Certain"
+			# 	print "URL: " + str(self.url)
+			# 	print "\r\nIssue Description: "
+			# 	print "CBC-mode ciphers are used in conjunction with TLSv1.0, which are vulnerable to the BEAST "
+			# 	print "attack, although the attack also relies on the attacker being able to force the browser "
+			# 	print "to generate many thousands of chosen plaintext through a malicious applet or cross-site "
+			# 	print "scripting. Additionally all modern browsers now provide mitigations for this attack.\r\n"
+			# 	print "Ciphers using the Cipher Block Chaining mode of operation in TLSv1.0 and SSLv3 are vulnerable "
+			# 	print "to an attack that could allow for the contents of encrypted communications to be retrieved. "
+			# 	print "For the attack to succeed, an attacker must be able to inject arbitrary plaintext into "
+			# 	print "communications between users and a server, e.g., using a malicious applet or a "
+			# 	print "Cross-Site-Scripting (XSS) vulnerability, and then observe the corresponding cipher texts. "
+			# 	print "Given several thousand requests, an attacker can then use this to determine the subsequent "
+			# 	print "plaintext blocks by encrypting the same messages multiple times. The vulnerability has been "
+			# 	print "fixed as of TLSv1.1 and client-side mitigations have been implemented by all current browsers. \r\n"
+			# 	print "List of BEAST Ciphers: "
+			# 	print "=========================================================\r\n"
+			# 	print "TLSv1: "
+			# 	print self.beastCiphers
+			# 	print "========================================================="
+			# 	print "\r\nIssue Remediation: "
+			# 	print "Remove Support for Weak Ciphers "
+			# 	print "Do something"
+			# 	print "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r"
 		except:
 			print "something went wrong"
 
@@ -780,16 +761,18 @@ class BurpExtender(IBurpExtender, ITab):
 		self.textPane.setCaretPosition(self.textPane.getDocument().getLength())
 
 	def clearText(self, e):
-		self.currentText = ('<h1 style="color: red">'
-			' When running, you may experience crashes. Just deal with it, this is stil a work in progress</h1>')
+		self.initialText = ('<h1 style="color: red">'
+				' When running, you may experience crashes. Just deal with it, this is stil a work in progress<br>'
+				' Make sure you have testssl installed in the /opt directory for Linux or ___ for Windows<br>'
+				' In addition, make sure you have /dev/shm on your machine</h2>')
 		self.textPane.setText(self.currentText)
 		self.targetSaveButton.setEnabled(False)
 
 	def saveToFile(self, event):
 		fileChooser = JFileChooser()
-		if not (self.url is None):
+		if not (self.connectionHost is None):
 			fileChooser.setSelectedFile(File("Scan_Output_%s.html" \
-				% (str(self.url))))
+				% (str(self.connectionHost))))
 		else:
 			fileChooser.setSelectedFile(File("Scan_Output.html"))
 		if (fileChooser.showSaveDialog(self.getUiComponent()) == JFileChooser.APPROVE_OPTION):
@@ -802,6 +785,10 @@ class BurpExtender(IBurpExtender, ITab):
 		print "making new request"
 		if self.port == '':
 			self.port = "443"
+		print "creating full string"
+		print self.protocol
+		print self.site
+		print self.port
 		fullSiteString = self.protocol + self.site + ":" + self.port + "/"
 		print fullSiteString
 		finalURL = URL(fullSiteString)
@@ -822,25 +809,38 @@ class BurpExtender(IBurpExtender, ITab):
 				self.addedToSiteMap = self._callbacks.addToSiteMap(requestResponse)
 				print "added to sitemap"
 				if self.beastCiphers != None:
-					print "There are ciphers vulnerable to BEAST"						
+					print "There are ciphers vulnerable to BEAST, adding issue"		
 					issue = CustomIssue(
 						requestResponse.getHttpService(),
-						self._helpers.analyzeRequest(requestResponse).getUrl(),
-						"Ciphers vulnerable to BEAST\r\n" + self.beastCiphers + ".",
+						requestResponse.getUrl(),
+						"CBC-mode ciphers are used in conjunction with TLSv1.0, which are vulnerable to the BEAST "
+						"attack, although the attack also relies on the attacker being able to force the browser "
+						"to generate many thousands of chosen plaintext through a malicious applet or cross-site "
+						"scripting. Additionally all modern browsers now provide mitigations for this attack.\r\n"
+						"Ciphers using the Cipher Block Chaining mode of operation in TLSv1.0 and SSLv3 are vulnerable "
+						"to an attack that could allow for the contents of encrypted communications to be retrieved. "
+						"For the attack to succeed, an attacker must be able to inject arbitrary plaintext into "
+						"communications between users and a server, e.g., using a malicious applet or a "
+						"Cross-Site-Scripting (XSS) vulnerability, and then observe the corresponding cipher texts. "
+						"Given several thousand requests, an attacker can then use this to determine the subsequent "
+						"plaintext blocks by encrypting the same messages multiple times. The vulnerability has been "
+						"fixed as of TLSv1.1 and client-side mitigations have been implemented by all current browsers."
+						"<br>TLSv1 Ciphers vulnerable to BEAST: <br>" + self.beastCiphers + "",
+						"The web server should be hardened to remove support for weak cipher suites. ",
 						"BEAST attack",
-						"Text",
-						"Medium")
-					print "issue made"
-					print issue
-					self.issueAdded = self._callbacks.addScanIssue(issue)
+						"Medium"
+					)
+					print type(issue)
+					self._callbacks.addScanIssue(issue)
 					print "issue added"
 				else:
 					print "No vulns were found"
 			else:	
-				self.updateText("<h2>Unable to add site to sitemap for some reason..<h2>")
+				self.updateText("<h2>Unable to add site to sitemap for some reason..</h2>")
 				print "Nothing was received"
 		except:
-				print "error adding issue"
+			# self.updateText("<h2>Error adding issue..</h2>")
+			print "error adding issue"
 
 class ScannerMenu(IContextMenuFactory):
 	def __init__(self, scannerInstance):
@@ -866,12 +866,13 @@ class ScannerMenu(IContextMenuFactory):
 					self.scannerInstance._callbacks.issueAlert("The selected request is not there")
 
 class CustomIssue(IScanIssue):
-    def __init__(self, httpService, url, httpMessages, name, detail, severity):
+    def __init__(self, httpService, url, issueBackground, remediationBackground, name, severity):
         self._httpService = httpService
         self._url = url
-        self._httpMessages = httpMessages
+        self._issueBackground = issueBackground
+        # self._httpMessages = httpMessages
+        self._remediationBackground = remediationBackground
         self._name = name
-        self._detail = detail
         self._severity = severity
 
     def getUrl(self):
@@ -890,19 +891,20 @@ class CustomIssue(IScanIssue):
         return "Certain"
 
     def getIssueBackground(self):
-        pass
+        return self._issueBackground
 
     def getRemediationBackground(self):
-        pass
+        return self._remediationBackground
 
     def getIssueDetail(self):
-        return self._detail
+        pass
+        # return self._detail
 
     def getRemediationDetail(self):
         pass
 
     def getHttpMessages(self):
-        return self._httpMessages
+        pass
 
     def getHttpService(self):
 		return self._httpService
