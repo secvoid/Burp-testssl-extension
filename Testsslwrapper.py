@@ -168,21 +168,24 @@ class BurpExtender(IBurpExtender, ITab):
 				print "wsl.exe found.\n"
 			else:
 				print "wsl.exe doesn't appear to be installed. If you try and use the extension now, you're gonna have a bad time. Please install it from the Windows store.\n"
-			if "testssl.sh" in subprocess.check_output(["where","/R","C:\\","testssl.sh"]):
 
-				self.path = subprocess.check_output(["where","/R","C:\\","testssl.sh"])
-				self.testSSLPathWindows = self.path.strip()
-				# self.pathing = require("path")
-				# self.convertedPath = "/mnt/" + p.posix.join.apply(p.posix, [].concat([self.testSSLPathWindows.split(p.win32.sep)[0].toLowerCase()], self.testSSLPathWindows.split(p.win32.sep).slice(1))).replace(":", "")
-				self.convert = self.testSSLPathWindows.replace("\\", "/")
-				self.convert2 = "/mnt/c/" + self.convert
-				self.convert3 = str(self.convert2.replace("C:/", ""))
-				self.convertedPathWindows = self.convert3.strip()
-				print self.convertedPathWindows
-				print "\n"
-				print ["wsl",self.convertedPathWindows,"--mapping","rfc","example.com"]
-				# print "\n"
-				# print self.convertedPath
+			self.path = subprocess.check_output(["where","/R","C:\\","testssl.sh"])
+			self.testSSLPathWindows = self.path.strip()
+			# self.pathing = require("path")
+			# self.convertedPath = "/mnt/" + p.posix.join.apply(p.posix, [].concat([self.testSSLPathWindows.split(p.win32.sep)[0].toLowerCase()], self.testSSLPathWindows.split(p.win32.sep).slice(1))).replace(":", "")
+			self.convert = self.testSSLPathWindows.replace("\\", "/")
+			self.convert2 = "/mnt/c/" + self.convert
+			self.convert3 = str(self.convert2.replace("C:/", ""))
+			self.convertedPathWindows = self.convert3.strip()
+			## Needs work ##
+			self.openSSLConfig = self.convertedPathWindows[:self.convertedPathWindows.index("/")] + "/bin/openssl.Linux.x86_64"
+			print self.openSSLConfig
+			print self.convertedPathWindows
+			print "\n"
+			# print ["wsl",self.convertedPathWindows,"--mapping","rfc","example.com"]
+			# print "\n"
+			# print self.convertedPath
+			if self.convertedPathWindows != 0:
 				print "testssl.sh found.\n"
 				# self.windep2Installed = True
 			else:
@@ -243,6 +246,7 @@ class BurpExtender(IBurpExtender, ITab):
 		# path = str(self.testSSLPath)
 
 		if(len(host) == 0):
+			self.updateText("<h2>Please enter a host to scan</h2>")
 			return
 
 		p = '(?P<protocol>http.*://)?(?P<host>[^:/ ]+).?(?P<port>[0-9]*).*'
@@ -324,8 +328,10 @@ class BurpExtender(IBurpExtender, ITab):
 		# command = subprocess.check_output(["/opt/testssl.sh/testssl.sh","-oH","/opt/testssl.sh/testing/result.txt","--mapping","rfc","--append",url]) ## For home computer linux vm
 		if self.isWindows:
 			try:
-				command = subprocess.check_output(["wsl",self.convertdPathWindows,"-oH","/mnt/c/Data/Scripts/result.html","--mapping","rfc","--append",connectionHost]).replace("\n", "<br>") ## Work computer
+				subprocess.check_output(["wsl",self.convertedPathWindows,"--openssl",self.openSSLConfig,"-oH","/mnt/c/Users/aomartia/Desktop/result.html","--mapping","rfc","-A",connectionHost]).replace("\n", "<br>") ## Work computer
 				time.sleep(1)
+				subprocess.check_output(["echo","end",">>","/mnt/c/Users/aomartia/Desktop/result.html"], shell=True)
+				print "File end added"
 			except:
 				self.updateText("<h2>An unexpected error occurred while running the regular scan (Windows) :( Please try again</h2>")
 				time.sleep(1)
@@ -652,7 +658,7 @@ class BurpExtender(IBurpExtender, ITab):
 		Crying = True
 		blacklist = ['<?','<!','<html','</html','<head','</head','<body','</body','<pre','<pre','<title','</title','<meta','</meta']
 		if self.isWindows:
-			filePath = 'C:\\Data\\Scripts\\result.html'
+			filePath = 'C:\\Users\\aomartia\\Desktop\\result.html'
 		elif self.isLinux:
 			filePath = '/dev/shm/result.html'
 		else:
@@ -675,10 +681,11 @@ class BurpExtender(IBurpExtender, ITab):
 							newLine=line+"<br>"
 							self.updateText(newLine)
 				if self.isWindows:
-					subprocess.call('del C:\\Data\\Scripts\\result.html', shell=True)
+					subprocess.call('del C:\\Users\\aomartia\\Desktop\\result.html', shell=True)
+					print "file was deleted (windows)"
 				elif self.isLinux:
 					subprocess.call('rm /dev/shm/result.html', shell=True)
-					print "file was deleted"
+					print "file was deleted (linux)"
 				else:
 					print "Program shouldn't be running cuz the OS wasn't detected.."
 					time.sleep(2)
@@ -694,7 +701,7 @@ class BurpExtender(IBurpExtender, ITab):
 
 	def isBEAST(self):
 		if self.isWindows:
-			filePath = 'C:\\Data\\Scripts\\result.html'
+			filePath = 'C:\\Users\\aomartia\\Desktop\\result.html'
 		elif self.isLinux:
 			filePath = '/dev/shm/result.html'
 		else:
