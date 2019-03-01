@@ -177,14 +177,7 @@ class BurpExtender(IBurpExtender, ITab):
 			self.convert2 = "/mnt/c/" + self.convert
 			self.convert3 = str(self.convert2.replace("C:/", ""))
 			self.convertedPathWindows = self.convert3.strip()
-			## Needs work ##
-			self.openSSLConfig = self.convertedPathWindows[:self.convertedPathWindows.index("/")] + "/bin/openssl.Linux.x86_64"
-			print self.openSSLConfig
-			print self.convertedPathWindows
-			print "\n"
-			# print ["wsl",self.convertedPathWindows,"--mapping","rfc","example.com"]
-			# print "\n"
-			# print self.convertedPath
+			self.openSSLConfig = os.path.dirname(self.convertedPathWindows) + "/bin/openssl.Linux.x86_64"
 			if self.convertedPathWindows != 0:
 				print "testssl.sh found.\n"
 				# self.windep2Installed = True
@@ -328,16 +321,16 @@ class BurpExtender(IBurpExtender, ITab):
 		# command = subprocess.check_output(["/opt/testssl.sh/testssl.sh","-oH","/opt/testssl.sh/testing/result.txt","--mapping","rfc","--append",url]) ## For home computer linux vm
 		if self.isWindows:
 			try:
-				subprocess.check_output(["wsl",self.convertedPathWindows,"--openssl",self.openSSLConfig,"-oH","/mnt/c/Users/aomartia/Desktop/result.html","--mapping","rfc","-A",connectionHost]).replace("\n", "<br>") ## Work computer
+				subprocess.check_output(["wsl",self.convertedPathWindows,"--openssl",self.openSSLConfig,"-oH","/mnt/c/Data/Scripts/result.html","--mapping","rfc",connectionHost]).replace("\n", "<br>") ## Work computer
 				time.sleep(1)
-				subprocess.check_output(["echo","end",">>","/mnt/c/Users/aomartia/Desktop/result.html"], shell=True)
+				subprocess.call("echo end >> C:\\Data\\Scripts\\result.html", shell=True)
 				print "File end added"
 			except:
 				self.updateText("<h2>An unexpected error occurred while running the regular scan (Windows) :( Please try again</h2>")
 				time.sleep(1)
 		elif self.isLinux:
 			try:
-				subprocess.check_output([self.testSSLPath,"-oH","/dev/shm/result.html","--mapping","rfc","-A",connectionHost]).replace("\n", "<br>")
+				subprocess.check_output([self.testSSLPath,"-oH","/dev/shm/result.html","--mapping","rfc",connectionHost]).replace("\n", "<br>")
 				# subprocess.check_output([self.findPathLinux,"-oH","/root/Desktop/result.html","--mapping","rfc","--append",url]).replace("\n", "<br>")
 				time.sleep(1)
 				subprocess.call('echo end >> /dev/shm/result.html', shell=True)
@@ -582,7 +575,7 @@ class BurpExtender(IBurpExtender, ITab):
 			# subprocessArguments = ["/opt/testssl.sh/testssl.sh","--color",str(0)] ## Home linux vm testing
 			# subprocessHelp = ["/opt/testssl.sh/testssl.sh"] ## Home linux vm testing
 			if self.isWindows:
-				subprocessArguments = ["wsl",self.convertedPathWindows]
+				subprocessArguments = ["wsl",self.convertedPathWindows,"--openssl",self.openSSLConfig,"-oH","/mnt/c/Data/Scripts/result.html","--mapping","rfc"]
 				subprocessHelp = ["wsl",self.convertedPathWindows]
 			elif self.isLinux:
 				subprocessArguments = [self.findPathLinux,"-oH","/dev/shm/result.html","--mapping","rfc"]
@@ -627,7 +620,12 @@ class BurpExtender(IBurpExtender, ITab):
 					subprocessArguments.append(str(connectionHost))
 					print subprocessArguments
 					command = subprocess.check_output(subprocessArguments).replace("\n", "<br>")
-					subprocess.check_output('echo end >> /dev/shm/result.html', shell=True)	
+					if self.isWindows:
+						subprocess.call("echo end >> C:\\Data\\Scripts\\result.html", shell=True)
+					elif self.isLinux:
+						subprocess.check_output('echo end >> /dev/shm/result.html', shell=True)	
+					else:
+						print "Nothing was run"
 			if self.addToSitemap.isSelected():
 				print "adding to sitemap"
 				self.addToScope()
@@ -655,10 +653,10 @@ class BurpExtender(IBurpExtender, ITab):
 		sys.exit()
 
 	def parseFile(self):
-		Crying = True
+		Finish = True
 		blacklist = ['<?','<!','<html','</html','<head','</head','<body','</body','<pre','<pre','<title','</title','<meta','</meta']
 		if self.isWindows:
-			filePath = 'C:\\Users\\aomartia\\Desktop\\result.html'
+			filePath = 'C:\\Data\\Scripts\\result.html'
 		elif self.isLinux:
 			filePath = '/dev/shm/result.html'
 		else:
@@ -667,7 +665,7 @@ class BurpExtender(IBurpExtender, ITab):
 		try:
 			with open(filePath) as fileName:
 				line_found = False
-				while Crying:
+				while Finish:
 					for line in fileName:
 						if line == 0:
 							continue
@@ -676,12 +674,13 @@ class BurpExtender(IBurpExtender, ITab):
 						elif line.startswith('end'):
 							if self.addToSitemap.isSelected():
 								self.isBEAST()
-							Crying = False
+							Finish = False
 						else:
 							newLine=line+"<br>"
 							self.updateText(newLine)
 				if self.isWindows:
-					subprocess.call('del C:\\Users\\aomartia\\Desktop\\result.html', shell=True)
+					os.remove("C:\\Data\\Scripts\\result.html")
+					# subprocess.check_output(['del','C:\\Data\\Scripts\\result.html'], shell=True)
 					print "file was deleted (windows)"
 				elif self.isLinux:
 					subprocess.call('rm /dev/shm/result.html', shell=True)
@@ -701,7 +700,7 @@ class BurpExtender(IBurpExtender, ITab):
 
 	def isBEAST(self):
 		if self.isWindows:
-			filePath = 'C:\\Users\\aomartia\\Desktop\\result.html'
+			filePath = 'C:\\Data\\Scripts\\result.html'
 		elif self.isLinux:
 			filePath = '/dev/shm/result.html'
 		else:
@@ -771,7 +770,7 @@ class BurpExtender(IBurpExtender, ITab):
 		self.initialText = ('<h1 style="color: red">'
 				' When running, you may experience crashes. Just deal with it, this is stil a work in progress<br>'
 				' Make sure you have testssl installed in the /opt directory for Linux or ___ for Windows<br>'
-				' In addition, make sure you have /dev/shm on your machine</h2>')
+				' In addition, make sure you have /dev/shm on your machine')
 		self.textPane.setText(self.currentText)
 		self.targetSaveButton.setEnabled(False)
 
