@@ -50,6 +50,7 @@ try:
 	import platform
 	import urllib2
 	import time
+	import socket
 	from threading import Thread, Event
 	# from modules import *
 
@@ -222,6 +223,26 @@ class BurpExtender(IBurpExtender, ITab):
 
 	def startRegularSSLScan(self,e):
 
+		print "Before scanning, checking if file already exists"
+		if self.isLinux:
+			exists = os.path.isfile('/dev/shm/result.html')
+			if exists:
+				print "A file exists"
+				subprocess.call("rm /dev/shm/result.html", shell=True)
+				print "Removed the file (linux)"
+			else:
+				print "A file doesn't exist, continuing on"
+				pass
+		if self.isWindows:
+			exists = os.path.isfile("C:\\Data\\Scripts\\result.html")
+			if exists:
+				print "A file exists"
+				subprocess.call("del C:\\Data\\Scripts\\result.html")
+				print "Removed the file (windows)"
+			else:
+				print "A file doesn't exist, continuing on"
+				pass
+
 		self.currentText = self.initialText
 
 		if self.targetSpecificButton.isSelected():
@@ -236,25 +257,19 @@ class BurpExtender(IBurpExtender, ITab):
 
 		host = str(self.targetInput.text)
 
-		self.scanningEvent.set()
-
 		if(len(host) == 0):
-			self.updateText("<h2>Please enter a host to scan</h2>")
 			return
 
-		p = '(?P<protocol>http.*://)?(?P<host>[^:/ ]+).?(?P<port>[0-9]*).*'
+		p = '(?P<protocol>http.*://)?(?P<host>[^:/ ]+).?(?P<port>[0-9a-zA-Z]*).*'
 		m = re.search(p,host)
 		self.site = m.group('host')
 		self.protocol = m.group('protocol')
 		self.port = m.group('port')
 
-		if host.find("://") == -1:
-			self.connectionHost = "https://" + host
-
 		if self.protocol == 'https://':
 			pass
 		elif self.protocol == 'http://':
-			self.updateText("<h2>regular HTTP will cause the program to crash, please enter again</h2>")
+			self.updateText("<h2>Nope, use https</h2>")
 			self.targetInputPanel.setEnabled(True)
 			self.targetRunButton.setEnabled(True)
 			self.targetSpecificButton.setEnabled(True)
@@ -285,16 +300,17 @@ class BurpExtender(IBurpExtender, ITab):
 				self.addToSitemap.setEnabled(True)
 				return					
 			elif self.port == '443':
-				self.connectionHost = "https://" + self.site + ":" + self.port
+				pass
+			elif self.port.isdigit() == False:
+				self.updateText("<h2>Wrong, enter a valid port or don't enter a port</h2>")
+				return
 			else:
-				self.connectionHost = self.site + ":" + self.port
-		else:
-			self.port == '443'
-
-		try:		
-			self.targetURL = URL(self.connectionHost)
-			if(self.targetURL.getPort() == -1):
-				self.targetURL = URL("https", self.targetURL.getHost(), 443, "/")
+				pass
+		if self.port == '':
+			self.port = '443'
+		self.connectionHost = self.protocol + self.site + ":" + self.port
+		try:
+			connection = socket.create_connection((self.site, int(self.port)), timeout=3)
 			self.targetInputPanel.setEnabled(False)
 			self.targetRunButton.setEnabled(False)
 			self.targetSpecificButton.setEnabled(False)
@@ -305,7 +321,7 @@ class BurpExtender(IBurpExtender, ITab):
 			self.scannerProcess = Thread(target=self.runRegularSSLScan, args=(self.connectionHost,))			
 			self.scannerProcess2 = Thread(target=self.parseFile)
 			self.scannerProcess.start()
-			time.sleep(.5)
+			time.sleep(2)
 			self.scannerProcess2.start()
 		except:
 			self.updateText("<h2>Connection not made, make sure you entered the host correctly<h2>")
@@ -370,6 +386,26 @@ class BurpExtender(IBurpExtender, ITab):
 
 	def startSpecificSSLScan(self,e):
 
+		print "Before scanning, checking if file already exists"
+		if self.isLinux:
+			exists = os.path.isfile('/dev/shm/result.html')
+			if exists:
+				print "A file exists"
+				subprocess.call("rm /dev/shm/result.html", shell=True)
+				print "Removed the file (linux)"
+			else:
+				print "A file doesn't exist, continuing on"
+				pass
+		if self.isWindows:
+			exists = os.path.isfile("C:\\Data\\Scripts\\result.html")
+			if exists:
+				print "A file exists"
+				subprocess.call("del C:\\Data\\Scripts\\result.html")
+				print "Removed the file (windows)"
+			else:
+				print "A file doesn't exist, continuing on"
+				pass
+
 		self.currentText = self.initialText
 
 		if not self.targetSpecificButton.isSelected():
@@ -409,19 +445,16 @@ class BurpExtender(IBurpExtender, ITab):
 		if(len(host) == 0):
 			return
 
-		p = '(?P<protocol>http.*://)?(?P<host>[^:/ ]+).?(?P<port>[0-9]*).*'
+		p = '(?P<protocol>http.*://)?(?P<host>[^:/ ]+).?(?P<port>[0-9a-zA-Z]*).*'
 		m = re.search(p,host)
 		self.site = m.group('host')
 		self.protocol = m.group('protocol')
 		self.port = m.group('port')
 
-		if host.find("://") == -1:
-			self.connectionHost = "https://" + host
-
 		if self.protocol == 'https://':
 			pass
 		elif self.protocol == 'http://':
-			self.updateText("<h2>regular HTTP will cause the program to crash, please enter again</h2>")
+			self.updateText("<h2>Nope, use https</h2>")
 			self.targetInputPanel.setEnabled(True)
 			self.targetRunButton.setEnabled(True)
 			self.targetSpecificButton.setEnabled(True)
@@ -452,16 +485,21 @@ class BurpExtender(IBurpExtender, ITab):
 				self.addToSitemap.setEnabled(True)
 				return					
 			elif self.port == '443':
-				self.connectionHost = "https://" + self.site + ":" + self.port
+				pass
+			elif self.port.isdigit() == False:
+				self.updateText("<h2>Wrong, enter a valid port or don't enter a port</h2>")
+				return
 			else:
-				self.connectionHost = self.site + ":" + self.port
-		else:
-			self.port == '443'
-
+				pass
+				# self.connectionHost = self.site + ":" + self.port
+		if self.port == '':
+			self.port = '443'
+		self.connectionHost = self.protocol + self.site + ":" + self.port
 		try:
-			self.targetURL = URL(self.connectionHost)
-			if(self.targetURL.getPort() == -1):
-				self.targetURL = URL("https", self.targetURL.getHost(), 443, "/")
+			# self.targetURL = URL(self.connectionHost)
+			# if(self.targetURL.getPort() == -1):
+			# 	self.targetURL = URL("https", self.targetURL.getHost(), 443, "/")
+			connection = socket.create_connection((self.site, int(self.port)), timeout=3)
 			self.targetInputPanel.setEnabled(False)
 			self.targetRunButton.setEnabled(False)
 			self.targetSpecificButton.setEnabled(False)
@@ -472,9 +510,11 @@ class BurpExtender(IBurpExtender, ITab):
 			self.scannerProcess = Thread(target=self.runSpecificSSLScan, args=(self.connectionHost,))
 			self.scannerProcess2 = Thread(target=self.parseFile)
 			self.scannerProcess.start()
-			time.sleep(.5)
+			time.sleep(2)
 			self.scannerProcess2.start()
-		except:
+		except Exception as error:
+			print error
+			print "Error on line {}".format(sys.exc_info()[-1].tb_lineno), type(error).__name__, error
 			self.updateText("<h2>Connection not made, make sure you entered the host correctly<h2>")
 			return
 
@@ -636,7 +676,7 @@ class BurpExtender(IBurpExtender, ITab):
 			if self.addToSitemap.isSelected():
 				self.addToScope()
 			else:
-				pass			
+				pass
 			self.targetInputPanel.setEnabled(True)
 			self.targetRunButton.setEnabled(True)
 			self.targetSpecificButton.setEnabled(True)
@@ -646,7 +686,9 @@ class BurpExtender(IBurpExtender, ITab):
 			self.targetSaveButton.setEnabled(True)
 			print "Thread1 successfully terminated"
 			time.sleep(.5)
-		except:
+		except Exception as error:
+			print error
+			print "Error on line {}".format(sys.exc_info()[-1].tb_lineno), type(error).__name__, error
 			self.updateText("<h2>An unexpected error occurred... :( Please try again. Make sure if you're entering additional flags that you enter them correctly</h2>")
 			self.targetInputPanel.setEnabled(True)
 			self.targetRunButton.setEnabled(True)
@@ -669,6 +711,7 @@ class BurpExtender(IBurpExtender, ITab):
 			print "OS not found"
 		try:
 			with open(filePath) as fileName:
+				print "Checking file"
 				line_found = False
 				while Finish:
 					for line in fileName:
@@ -708,7 +751,8 @@ class BurpExtender(IBurpExtender, ITab):
 				else:
 					print "Program shouldn't be running cuz the OS wasn't detected.."
 					time.sleep(.5)
-		except:
+		except Exception as error:
+			print error
 			print "Something went wrong in the parse statement"
 			if self.isWindows:
 				subprocess.call('del C:\\Data\\Scripts\\result.html', shell=True)
@@ -1091,17 +1135,16 @@ class BurpExtender(IBurpExtender, ITab):
 
 	def clearText(self, e):
 		self.initialText = ('<h1 style="color: red;">'
-			' When running, you may experience crashes. Just deal with it, this is still a work in progress<br>'
-			' Make sure you have testssl installed in the /opt directory for Linux or ___ for Windows<br>'
-			' In addition, make sure you have /dev/shm on your machine</h1>')
+				' When running, you may experience crashes. Just deal with it, this is stil a work in progress<br>'
+				' Make sure you have testssl installed in the /opt directory for Linux. Any location is fine for Windows<br>'
+				' If you have testssl installed more than once, this extension might not work.</h1>')		
 		self.textPane.setText(self.initialText)
 		self.targetSaveButton.setEnabled(False)
 
 	def saveToFile(self, event):
 		fileChooser = JFileChooser()
 		if not (self.connectionHost is None):
-			fileChooser.setSelectedFile(File("Scan_Output_%s.html" \
-				% (str(self.connectionHost))))
+			fileChooser.setSelectedFile(File("Scan_Output_%s.html" % (str(self.connectionHost))))
 		else:
 			fileChooser.setSelectedFile(File("Scan_Output.html"))
 		if (fileChooser.showSaveDialog(self.getUiComponent()) == JFileChooser.APPROVE_OPTION):
@@ -1111,8 +1154,6 @@ class BurpExtender(IBurpExtender, ITab):
 			fw.close()
 
 	def addToScope(self):
-		if self.port == '':
-			self.port = "443"
 		fullSiteString = self.protocol + self.site + ":" + self.port + "/"
 		finalURL = URL(fullSiteString)
 		newRequest = self._helpers.buildHttpRequest(finalURL)
@@ -1419,7 +1460,6 @@ class BurpExtender(IBurpExtender, ITab):
 				else:	
 					# try:
 					if not issueList:
-						print "No issues were detected, very impressive"
 						return
 					else:
 						oldIssueNames = []
@@ -1432,10 +1472,8 @@ class BurpExtender(IBurpExtender, ITab):
 									self._callbacks.addScanIssue(issue)
 								else:
 									print ""+ issue.getIssueName() + " was not found in missingIssueList"
-						except Exception as ex:
-							print ex
-							raise
-							print "NOTHING IS WORKING!!!!"
+						except:
+							print "Error adding new issues"
 			else:	
 				self.updateText("<h2>Unable to add site to sitemap for some reason..</h2>")
 		except:
@@ -1485,7 +1523,7 @@ class CustomIssue(IScanIssue):
         return self._severity
 
     def getConfidence(self):
-        return "Tentative"
+        return "Certain"
 
     def getIssueBackground(self):
         return self._issueBackground
