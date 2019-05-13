@@ -127,6 +127,7 @@ class BurpExtender(IBurpExtender, ITab):
 			' When running, you may experience crashes. Just deal with it, this is stil a work in progress<br>'
 			' Make sure you have testssl installed in the /opt directory for Linux. Any location is fine for Windows<br>'
 			' If you have testssl installed more than once, this extension might not work.</h1>')
+		self.initialText += ('<br><h1>Regular scan syntax: ./testssl.sh --ip one --mapping rfc -oH [file] [URI]</h2>')
 		self.currentText = self.initialText
 		self.textPane = swing.JTextPane()
 
@@ -1137,7 +1138,8 @@ class BurpExtender(IBurpExtender, ITab):
 		self.initialText = ('<h1 style="color: red;">'
 				' When running, you may experience crashes. Just deal with it, this is stil a work in progress<br>'
 				' Make sure you have testssl installed in the /opt directory for Linux. Any location is fine for Windows<br>'
-				' If you have testssl installed more than once, this extension might not work.</h1>')		
+				' If you have testssl installed more than once, this extension might not work.</h1>')
+		self.initialText += ('<br><h1>Regular scan syntax: ./testssl.sh --ip one --mapping rfc -oH [file] [URI]</h2>')
 		self.textPane.setText(self.initialText)
 		self.targetSaveButton.setEnabled(False)
 
